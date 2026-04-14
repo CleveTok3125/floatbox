@@ -102,6 +102,7 @@ class BorderlessInput(QWidget):
             self.keyboard.hotkey(*Hotkey.CHANGE_INPUT_METHOD)
 
     def submit(self):
+        QTimer.singleShot(Config.CHANGE_INPUT_METHOD_DELAY, self.send_change_hotkey)
         self.text = self.line_edit.text()
         self.close()
 
