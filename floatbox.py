@@ -1,12 +1,14 @@
 #!/bin/python
 
 import sys
-import pyautogui
-import pyperclip
-from PyQt6.QtWidgets import QApplication, QLineEdit, QVBoxLayout, QWidget
-from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QKeyEvent
 from typing import Optional
+
+import pyperclip
+from evdev import UInput
+from evdev import ecodes as e
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtWidgets import QApplication, QLineEdit, QVBoxLayout, QWidget
 
 
 class Hotkey:
@@ -22,6 +24,46 @@ class Config:
         r"\n": "\n",
         r"\t": "\t",
     }
+
+
+class KeyboardSender:
+    def __init__(self):
+        self.ui = UInput(
+            {
+                e.EV_KEY: [
+                    e.KEY_LEFTALT,
+                    e.KEY_LEFTCTRL,
+                    e.KEY_Z,
+                    e.KEY_V,
+                ]
+            },
+            name="floatbox-uinput",
+        )
+
+    def key_name_to_code(self, key: str) -> int:
+        mapping = {
+            "alt": e.KEY_LEFTALT,
+            "ctrl": e.KEY_LEFTCTRL,
+            "z": e.KEY_Z,
+            "v": e.KEY_V,
+        }
+        if key not in mapping:
+            raise ValueError(f"Unsupported key: {key}")
+        return mapping[key]
+
+    def hotkey(self, *keys: str) -> None:
+        codes = [self.key_name_to_code(k.lower()) for k in keys]
+
+        for code in codes:
+            self.ui.write(e.EV_KEY, code, 1)
+        self.ui.syn()
+
+        for code in reversed(codes):
+            self.ui.write(e.EV_KEY, code, 0)
+        self.ui.syn()
+
+    def close(self) -> None:
+        self.ui.close()
 
 
 class BorderlessInput(QWidget):
@@ -44,6 +86,8 @@ class BorderlessInput(QWidget):
         layout.addWidget(self.line_edit)
         self.setLayout(layout)
 
+        self.keyboard = KeyboardSender()
+
         QTimer.singleShot(Config.CHANGE_INPUT_METHOD_DELAY, self.send_change_hotkey)
 
         self.timeout_timer = QTimer()
@@ -55,7 +99,7 @@ class BorderlessInput(QWidget):
 
     def send_change_hotkey(self):
         if Hotkey.CHANGE_INPUT_METHOD:
-            pyautogui.hotkey(*Hotkey.CHANGE_INPUT_METHOD)
+            self.keyboard.hotkey(*Hotkey.CHANGE_INPUT_METHOD)
 
     def submit(self):
         self.text = self.line_edit.text()
@@ -100,7 +144,9 @@ def main():
     pyperclip.copy(text)
 
     if Hotkey.PASTE:
-        pyautogui.hotkey(*Hotkey.PASTE)
+        sender = KeyboardSender()
+        sender.hotkey(*Hotkey.PASTE)
+        sender.close()
         pyperclip.copy(old_clipboard)
 
 
